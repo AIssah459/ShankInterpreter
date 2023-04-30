@@ -1,5 +1,3 @@
-
-import javax.swing.plaf.nimbus.State;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -11,30 +9,59 @@ class ProgramNode extends Node {
 	private HashMap<String, FunctionNode> functions;
 
 	public ProgramNode() {
-		functions = null;
+		functions = new HashMap<>();
+		functions.put("Read", new BuiltInRead());
+		functions.put("Write", new BuiltInWrite());
+		functions.put("Left", new BuiltInLeft());
+		functions.put("Right", new BuiltInRight());
+		functions.put("Substring", new BuiltInSubstring());
+		functions.put("SquareRoot", new BuiltInSqrt());
+		functions.put("GetRandom", new BuiltInRandom());
+		functions.put("IntegerToReal", new BuiltInIntToReal());
+		functions.put("RealToInteger", new BuiltInRealToInt());
 	}
 	
 	public ProgramNode(HashMap<String, FunctionNode> functions) {
-		this.functions = functions;
+		for (FunctionNode fn: functions.values()) {
+			functions.put(fn.getName(), fn);
+		}
 	}
-	
+
+	public HashMap<String, FunctionNode> getFunctions() {
+		return functions;
+	}
+	public void addFunctions(HashMap<String, FunctionNode> functions) {
+		for (FunctionNode fn: functions.values()) {
+			functions.put(fn.getName(), fn);
+		}
+	}
+	public void addFunc(FunctionNode fn) {
+		functions.put(fn.getName(), fn);
+	}
+
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
-		String t = "~~~~~PROGRAM~~~~~\n\n";
-		for(FunctionNode f: functions.values()) {
-			t += f.toString();
+		String t = "~~~~~PROGRAM~~~~~\n";
+		for(FunctionNode fn: functions.values()) {
+			if(fn instanceof BuiltInFunction) {
+
+			} else {
+				t += fn.toString();
+			}
 		}
 		return t;
 	}
 }
 
 class FunctionNode extends Node {
-	private String name;
+	protected String name;
 	private ArrayList<VariableNode> params;
 	private ArrayList<VariableNode> vars;
 	private ArrayList<Node> expressions;
 	private ArrayList<StatementNode> statements;
+
+	protected boolean isVariadic() {return false;}
 
 	public FunctionNode() {
 		params = new ArrayList<>();
@@ -59,6 +86,18 @@ class FunctionNode extends Node {
 		return this.name;
 	}
 
+	public ArrayList<VariableNode> getParams() {
+		return params;
+	}
+
+	public ArrayList<VariableNode> vars() {
+		return vars;
+	}
+
+	public ArrayList<StatementNode> statements() {
+		return statements;
+	}
+
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
@@ -81,7 +120,7 @@ class FunctionNode extends Node {
 				t += "\n";
 			}
 		}
-		t += ":END";
+		t += ":END\n";
 		return t;
 	}
 }
@@ -110,6 +149,15 @@ class AssignmentNode extends StatementNode {
 		target = new VariableRefNode(name, arrIndexExpr);
 		this.val = val;
 	}
+
+	public Node getVal() {
+		return val;
+	}
+
+	public VariableRefNode getTarget() {
+		return target;
+	}
+
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
@@ -118,23 +166,43 @@ class AssignmentNode extends StatementNode {
 }
 
 class FunctionCallNode extends StatementNode {
-	String name;
-	ArrayList<VariableNode> params;
+	private String name;
+	private ArrayList<ParameterNode> params;
 	public FunctionCallNode(String n) {
 		name = n;
+		params = new ArrayList<>();
 	}
-	public FunctionCallNode(String n, ArrayList<VariableNode> p) {
+	public FunctionCallNode(String n, ArrayList<ParameterNode> p) {
 		name = n;
 		params = p;
 	}
+
+	public void addArg(ParameterNode p) {
+		params.add(p);
+	}
+	public String getName() {
+		return name;
+	}
+
+	public ArrayList<ParameterNode> getParams() {
+		return params;
+	}
+
 	@Override
 	public String toString() {
+
+		String s = ":FUNCCALL ";
+		s += name + ": ";
+		for(ParameterNode p: params) {
+			s += p.toString() + " ";
+		}
+		s += "\n";
 		// TODO Auto-generated method stub
-		return null;
+		return s;
 	}
 }
 
-class IfNode extends Node {
+class IfNode extends StatementNode {
 
 	private BoolCompNode condition;
 	private ArrayList<StatementNode> statements;
@@ -152,7 +220,12 @@ class IfNode extends Node {
 	public void addElseBlock(IfNode e) {
 		elseNode = e;
 	}
-
+	public BoolCompNode getCondition() {
+		return condition;
+	}
+	public ArrayList<StatementNode> statements() {
+		return statements;
+	}
 	public IfNode getElseBlock() {
 		return elseNode;
 	}
@@ -160,31 +233,97 @@ class IfNode extends Node {
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
-		return null;
+		String s = "\t:IF ";
+		s += condition.toString();
+		for (StatementNode sn: statements) {
+			s += "\n\t\t";
+			s += sn.toString();
+		}
+		s += "\n";
+		return s;
 	}
 }
 
-class WhileNode extends Node {
+class WhileNode extends StatementNode {
 
 	BoolCompNode condition;
 	ArrayList<StatementNode> statements;
+
+	public WhileNode(BoolCompNode c, ArrayList<StatementNode> s) {
+		condition = c;
+		statements = s;
+	}
+
+	public BoolCompNode getCondition() {
+		return condition;
+	}
+	public ArrayList<StatementNode> statements() {
+		return statements;
+	}
+
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
-		return null;
+		String s = "\t:WHILE ";
+		s += condition.toString();
+		for (StatementNode sn: statements) {
+			s += "\n\t\t";
+			s += sn.toString();
+		}
+		s += "\n";
+		return s;
 	}
 }
 
-class FromNode extends Node {
+class ForNode extends StatementNode {
 
-	BoolCompNode condition;
+	Node expr;
 	ArrayList<StatementNode> statements;
 	Node from;
 	Node to;
+
+	public ForNode(Node e, Node f, Node t, ArrayList<StatementNode> s) {
+		expr = e;
+		from = f;
+		to = t;
+		statements = s;
+	}
+
+	public Node getFrom() {
+		return from;
+	}
+	public Node getTo() {
+		return to;
+	}
+	public ArrayList<StatementNode> statements() {
+		return statements;
+	}
+
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
 		return null;
+	}
+}
+
+class RepeatNode extends StatementNode {
+
+	BoolCompNode condition;
+	ArrayList<StatementNode> statements;
+
+	public RepeatNode(BoolCompNode c, ArrayList<StatementNode> s) {
+		condition = c;
+		statements = s;
+	}
+	public BoolCompNode getCondition() {
+		return condition;
+	}
+	public ArrayList<StatementNode> statements() {
+		return statements;
+	}
+	public String toString() {
+		// TODO Auto-generated method stub
+		return "REPEAT UNTIL " + condition.toString();
 	}
 }
 
@@ -200,6 +339,16 @@ class BoolCompNode extends Node {
 		this.comparison = comparison;
 		lexpr = l;
 		rexpr = r;
+	}
+
+	public Token.tokenType condition() {
+		return comparison;
+	}
+	public Node left() {
+		return lexpr;
+	}
+	public Node right() {
+		return rexpr;
 	}
 
 	@Override
@@ -327,6 +476,13 @@ class BooleanNode extends Node {
 	public boolean getVal() {
 		return val;
 	}
+
+	public Token.tokenType type() {
+		if(val == true) {
+			return Token.tokenType.TRUE;
+		}
+		return Token.tokenType.FALSE;
+	}
 	
 	@Override
 	public String toString() {
@@ -340,7 +496,8 @@ class MathOpNode extends Node {
 		ADD,
 		SUB,
 		MUL,
-		DIV
+		DIV,
+		MOD
 	}
 	MathOp op;
 	Node l;
@@ -351,12 +508,30 @@ class MathOpNode extends Node {
 			case MINUS -> MathOp.SUB;
 			case MUL -> MathOp.MUL;
 			case DIV -> MathOp.DIV;
+			case MODULO -> MathOp.MOD;
 			default -> throw new SyntaxErrorException("Invalid Math Operation: " + t);
 		};
 		this.l = l;
 		this.r = r;
 	}
-	
+
+	public Token.tokenType getOp() {
+		Token.tokenType t = switch (op) {
+			case ADD -> Token.tokenType.PLUS;
+			case SUB -> Token.tokenType.MINUS;
+			case MUL -> Token.tokenType.MUL;
+			case DIV -> Token.tokenType.DIV;
+			case MOD -> Token.tokenType.MODULO;
+		};
+		return t;
+	}
+	public Node left() {
+		return l;
+	}
+	public Node right() {
+		return r;
+	}
+
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
@@ -376,10 +551,16 @@ class VariableNode extends Node {
 	private varType type;
 	private boolean changeable;
 	private Node val;
+	private boolean ranged = false;
+	private boolean realRanged = false;
 	private int from;
 	private int to;
+
+	private float realFrom;
+	private float realTo;
 	
 	public VariableNode(String name, Token.tokenType t, Object val, boolean changeable) throws SyntaxErrorException {
+		ranged = false;
 		this.name = name;
 		switch (t) {
 			case CHARLIT:
@@ -413,6 +594,7 @@ class VariableNode extends Node {
 		this.changeable = changeable;
 	}
 	public VariableNode(String name, Token.tokenType t, boolean changeable) throws SyntaxErrorException {
+		ranged = false;
 		this.name = name;
 		switch (t) {
 			case CHAR:
@@ -441,7 +623,103 @@ class VariableNode extends Node {
 		this.val = null;
 		this.changeable = changeable;
 	}
-	
+
+	public VariableNode(String name, Token.tokenType t, Object val, boolean changeable, int from, int to) throws SyntaxErrorException {
+		ranged = true;
+		this.from = from;
+		this.to = to;
+		this.name = name;
+		switch (t) {
+			case CHARLIT:
+				this.type = varType.CHAR;
+				this.val = new CharNode((Character)val);
+				break;
+
+			case INTEGERLIT:
+				this.type = varType.INT;
+				this.val = new IntNode(Integer.parseInt((String)val));
+				break;
+
+			case REALLIT:
+				this.type = varType.REAL;
+				this.val = new RealNode(Float.parseFloat((String)val));
+				break;
+
+			case STRINGLIT:
+				this.type = varType.STRING;
+				this.val = new StringNode((String)val);
+				break;
+
+			case BOOLEAN:
+				this.type = varType.BOOLEAN;
+				this.val = new BooleanNode((Boolean)val);
+				break;
+
+			default:
+				throw new SyntaxErrorException("Invalid variable type: " + t);
+		}
+		this.changeable = changeable;
+	}
+
+	public VariableNode(String name, Token.tokenType t, Object val, boolean changeable, float rf, float rt) throws SyntaxErrorException {
+		realRanged = true;
+		realFrom = rf;
+		realTo = rt;
+		this.name = name;
+		switch (t) {
+			case CHARLIT:
+				this.type = varType.CHAR;
+				this.val = new CharNode((Character)val);
+				break;
+
+			case INTEGERLIT:
+				this.type = varType.INT;
+				this.val = new IntNode(Integer.parseInt((String)val));
+				break;
+
+			case REALLIT:
+				this.type = varType.REAL;
+				this.val = new RealNode(Float.parseFloat((String)val));
+				break;
+
+			case STRINGLIT:
+				this.type = varType.STRING;
+				this.val = new StringNode((String)val);
+				break;
+
+			case TRUE, FALSE:
+				this.type = varType.BOOLEAN;
+				this.val = new BooleanNode((Boolean)val);
+				break;
+
+			default:
+				throw new SyntaxErrorException("Invalid variable type: " + t);
+		}
+		this.changeable = changeable;
+	}
+
+	public String name() {
+		return name;
+	}
+
+	public Token.tokenType type() throws SyntaxErrorException {
+		Token.tokenType t = switch (type) {
+			case REAL -> Token.tokenType.REALLIT;
+			case INT -> Token.tokenType.INTEGERLIT;
+			case CHAR -> Token.tokenType.CHARLIT;
+			case STRING -> Token.tokenType.STRINGLIT;
+			case BOOLEAN -> ((BooleanNode) val).type();
+		};
+		return t;
+	}
+
+	public Node getVal() {
+		return val;
+	}
+	public boolean isChangeable() {
+		return changeable;
+	}
+
 	@Override
 	public String toString() {
 		// TODO Auto-generated method stub
@@ -453,20 +731,61 @@ class VariableNode extends Node {
 		if(val != null) {
 			t += ": " + this.val;
 		}
+		if(ranged) {
+			t += " FROM " + from + " TO " + to;
+		}
+		else if(realRanged) {
+			t += " FROM " + from + " TO " + to;
+		}
 		return t;
+	}
+}
+
+class ParameterNode {
+	private Node v;
+	public ParameterNode(Node v) {
+		if(v instanceof VariableNode) {
+			this.v = (VariableNode) v;
+		}
+		else {
+			this.v = v;
+		}
+	}
+
+	public ParameterNode(VariableRefNode v) {
+		this.v = v;
+	}
+
+	public Node getVar() {
+		return v;
+	}
+
+	@Override
+	public String toString() {
+		// TODO Auto-generated method stub
+		return "ARG(" + v.toString() + ")";
 	}
 }
 
 class VariableRefNode extends Node{
 	private String name;
 	private Node arrIndexExpr;
+
+	private boolean changeable = false;
 	public VariableRefNode(String name) {
+		this.name = name;
+		this.arrIndexExpr = null;
+	}
+	public VariableRefNode(String name, boolean changeable) {
 		this.name = name;
 		this.arrIndexExpr = null;
 	}
 	public VariableRefNode(String name, Node arrIndexExpr) {
 		this.name = name;
 		this.arrIndexExpr = arrIndexExpr;
+	}
+	public String getName() {
+		return name;
 	}
 	@Override
 	public String toString() {
@@ -478,4 +797,8 @@ class VariableRefNode extends Node{
 			return name + "[" + arrIndexExpr.toString() + "]";
 		}
 	}
+}
+
+class ArrayNode {
+
 }

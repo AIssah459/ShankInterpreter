@@ -6,25 +6,28 @@ public class Parser {
 	ArrayList<Token> tokens;
 	int index;
 	Token currentToken;
+	ProgramNode p;
+	HashMap<String, FunctionNode> functions;
 	
 	public Parser(String input) {
+		p = new ProgramNode();
 		l = new Lexer(input);
 		tokens = new ArrayList<>(l.tokens());
-		//l.printTokens();
+		l.printTokens();
 		currentToken = tokens.get(0);
 		index = 0;
 	}
 	
 	
 	public ProgramNode parse() throws SyntaxErrorException {
-		HashMap<String, FunctionNode> functions = new HashMap<>();
-		ProgramNode p;
+		functions = new HashMap<>();
+		p.addFunctions(functions);
 		FunctionNode f;
 		while(peek() != null) {
 			f = function();
 			functions.put(f.getName(), f);
+			p.addFunc(f);
 		}
-		p = new ProgramNode(functions);
 		return p;
 	}
 
@@ -45,6 +48,7 @@ public class Parser {
 		matchAndRemove(Token.tokenType.DEFINE);
 		Token name = matchAndRemove(Token.tokenType.IDENTIFIER);
 		matchAndRemove(Token.tokenType.LPAREN);
+		expectEndOfLine();
 
 
 		/*
@@ -52,6 +56,8 @@ public class Parser {
 		 */
 
 		parameterDeclarations(params);
+
+		matchAndRemove(Token.tokenType.INDENT);
 
 		/*
 		expect constants and variables
@@ -68,7 +74,9 @@ public class Parser {
 			}
 		}
 
-		while(peek() != null) {
+		expectEndOfLine();
+
+		while(peek() != null && currentToken.getTokenType() != Token.tokenType.DEDENT) {
 			statements.add(statements());
 		}
 
@@ -79,7 +87,26 @@ public class Parser {
 	}
 
 	private StatementNode statements() throws SyntaxErrorException {
-		return assignment();
+		switch (currentToken.getTokenType()) {
+			case IF:
+				return parseIf();
+			case FOR:
+				return parseFor();
+			case WHILE:
+				return parseWhile();
+			case IDENTIFIER:
+				if(functions.containsKey(currentToken.getValue())) {
+					return parseFuncCall();
+				} else if (p.getFunctions().containsKey(currentToken.getValue())) {
+					return parseFuncCall();
+				} else {
+					return assignment();
+				}
+			case REPEAT:
+				return parseRepeat();
+			default:
+				return assignment();
+		}
 	}
 
 	private AssignmentNode assignment() throws SyntaxErrorException {
@@ -120,18 +147,31 @@ public class Parser {
 		return n;
 	}
 
-	private Node parseFuncCall() throws SyntaxErrorException {
-		Token name = matchAndRemove(Token.tokenType.IDENTIFIER);
-		matchAndRemove(Token.tokenType.LPAREN);
-		if(currentToken.getTokenType() != Token.tokenType.RPAREN) {
-
-		}
-		else {
-			matchAndRemove(Token.tokenType.RPAREN);
+	private ParameterNode parseParameters() throws SyntaxErrorException {
+		if(currentToken.getTokenType() == Token.tokenType.IDENTIFIER) {
+			matchAndRemove(Token.tokenType.IDENTIFIER);
+			return new ParameterNode(new VariableRefNode(currentToken.getValue()));
+		} else if (currentToken.getTokenType() == Token.tokenType.VAR) {
+			matchAndRemove(Token.tokenType.VAR);
+			return new ParameterNode(new VariableRefNode(currentToken.getValue(), true));
+		} else {
+			ParameterNode p = new ParameterNode(boolCmp());
+			return p;
 		}
 	}
 
+	private FunctionCallNode parseFuncCall() throws SyntaxErrorException {
+		Token name = matchAndRemove(Token.tokenType.IDENTIFIER);
+		FunctionCallNode fc = new FunctionCallNode(name.getValue());
+		while(currentToken.getTokenType() != Token.tokenType.ENDOFLINE) {
+			fc.addArg(parseParameters());
+		}
+		expectEndOfLine();
+		return fc;
+	}
+
 	private IfNode parseIf() throws SyntaxErrorException {
+		expectEndOfLine();
 		BoolCompNode condition = null;
 		ArrayList<StatementNode> statements = new ArrayList<>();
 		Node boolCmpResult;
@@ -144,11 +184,51 @@ public class Parser {
 		}
 		matchAndRemove(Token.tokenType.THEN);
 		matchAndRemove(Token.tokenType.INDENT);
-		while(peek() != null && currentToken.getTokenType() != Token.tokenType.ELSIF && currentToken.getTokenType() != Token.tokenType.ELSE) {
+		while(peek() != null && currentToken.getTokenType() != Token.tokenType.ELSIF && currentToken.getTokenType() != Token.tokenType.ELSE && currentToken.getTokenType() != Token.tokenType.DEDENT) {
 			statements.add(statements());
 		}
+		result = new IfNode(condition, statements, null);
 		addElseStatements(result);
+		expectEndOfLine();
 		return result;
+	}
+
+	private ForNode parseFor() throws SyntaxErrorException {
+		ArrayList<StatementNode> s = new ArrayList<>();
+		matchAndRemove(Token.tokenType.FOR);
+		Node e = boolCmp();
+		matchAndRemove(Token.tokenType.FROM);
+		Node f = boolCmp();
+		matchAndRemove(Token.tokenType.TO);
+		Node t = boolCmp();
+		expectEndOfLine();
+		matchAndRemove(Token.tokenType.INDENT);
+		while (peek() != null && currentToken.getTokenType() != Token.tokenType.ENDOFLINE && currentToken.getTokenType() != Token.tokenType.DEDENT) {
+			s.add(statements());
+		}
+
+		return new ForNode(e, f, t, s);
+	}
+
+	private WhileNode parseWhile() throws SyntaxErrorException {
+		ArrayList<StatementNode> s = new ArrayList<>();
+		matchAndRemove(Token.tokenType.WHILE);
+		BoolCompNode c = (BoolCompNode) boolCmp();
+		while (peek() != null && currentToken.getTokenType() != Token.tokenType.ENDOFLINE && currentToken.getTokenType() != Token.tokenType.DEDENT) {
+			s.add(statements());
+		}
+		return new WhileNode(c, s);
+	}
+
+	private RepeatNode parseRepeat() throws SyntaxErrorException {
+		expectEndOfLine();
+		matchAndRemove(Token.tokenType.REPEAT);
+		matchAndRemove(Token.tokenType.UNTIL);
+		ArrayList<StatementNode> s = new ArrayList<>();
+		while (peek() != null && currentToken.getTokenType() != Token.tokenType.ENDOFLINE && currentToken.getTokenType() != Token.tokenType.DEDENT) {
+			s.add(statements());
+		}
+		return new RepeatNode((BoolCompNode) boolCmp(), s);
 	}
 
 	private Node boolCmp() throws SyntaxErrorException {
@@ -182,9 +262,10 @@ public class Parser {
 				n = new BoolCompNode(Token.tokenType.NOTEQ, l, expression());
 				break;
 			default:
+				//matchAndRemove(t.getTokenType());
 				return l;
 		}
-		expectEndOfLine();
+		//expectEndOfLine();
 		return n;
 	}
 
@@ -197,8 +278,7 @@ public class Parser {
 			Node right = term();
 			left = new MathOpNode(mathOp, left, right);
 		}
-		expectEndOfLine();
-		//System.out.println("Returning expression: " + left);
+		//expectEndOfLine();
 		return left;
 	}
 
@@ -228,6 +308,12 @@ public class Parser {
 				matchAndRemove(Token.tokenType.RPAREN);
 				//System.out.println("RETURNING NODE: " + node);
 				return node;
+			case STRINGLIT:
+				matchAndRemove(Token.tokenType.STRINGLIT);
+				return new StringNode(token.getValue());
+			case CHARLIT:
+				matchAndRemove(Token.tokenType.CHARLIT);
+				return new CharNode(token.getValue().charAt(0));
 			default:
 				throw new RuntimeException("Unexpected token: " + token.getValue() + "(" + token.getTokenType() + "): (Line " + token.getLine() + ")");
 		}
@@ -274,8 +360,11 @@ public class Parser {
 					matchAndRemove(Token.tokenType.STRING);
 				} else if (paramType == Token.tokenType.CHAR) {
 					matchAndRemove(Token.tokenType.CHAR);
-				}
-				else {
+				} else if (paramType == Token.tokenType.REAL) {
+					matchAndRemove(Token.tokenType.REAL);
+				} else if (paramType == Token.tokenType.BOOLEAN) {
+					matchAndRemove(Token.tokenType.BOOLEAN);
+				} else {
 					throw new SyntaxErrorException("Unexpected token: " + currentToken);
 				}
 
@@ -324,36 +413,60 @@ public class Parser {
 			matchAndRemove(Token.tokenType.INDENT);
 		}
 
-		Token.tokenType variable = Token.tokenType.VARIABLES;
-		matchAndRemove(variable);
+		Token.tokenType t;
+		matchAndRemove(Token.tokenType.VARIABLES);
 		Token ident = matchAndRemove(Token.tokenType.IDENTIFIER);
-		if(currentToken.getTokenType() == Token.tokenType.COMMA) {
+		if (currentToken.getTokenType() == Token.tokenType.COMMA) {
 			ArrayList<Token> idents = new ArrayList<>();
-			Token.tokenType t;
 			idents.add(ident);
-			if(currentToken == null) {
+			if (currentToken == null) {
 				throw new SyntaxErrorException("Unexpected null token.");
 			}
 			matchAndRemove(Token.tokenType.COMMA);
-			while(currentToken.getTokenType() != Token.tokenType.COLON) {
+			while (currentToken.getTokenType() != Token.tokenType.COLON) {
 				idents.add(matchAndRemove(Token.tokenType.IDENTIFIER));
-				if(currentToken.getTokenType() == Token.tokenType.COMMA) {
+				if (currentToken.getTokenType() == Token.tokenType.COMMA) {
 					matchAndRemove(Token.tokenType.COMMA);
 				}
 			}
 			matchAndRemove(Token.tokenType.COLON);
 			t = currentToken.getTokenType();
 			matchAndRemove(t);
-			for(Token i: idents) {
+			if(currentToken.getTokenType() == Token.tokenType.FROM) {
+				matchAndRemove(Token.tokenType.FROM);
+				Token from = matchAndRemove(currentToken.getTokenType());
+				matchAndRemove(Token.tokenType.TO);
+				Token to = matchAndRemove(currentToken.getTokenType());
+				if(t == Token.tokenType.INTEGER) {
+					for(Token i: idents) {
+						vars.add(new VariableNode(i.getValue(), t, null, true, Integer.parseInt(from.getValue()), Integer.parseInt(to.getValue())));
+					}
+				} else if (t == Token.tokenType.REAL) {
+					for(Token i: idents) {
+						vars.add(new VariableNode(i.getValue(), t, null, true, Float.parseFloat(from.getValue()), Float.parseFloat(to.getValue())));
+					}
+				}
+			}
+			for (Token i : idents) {
 				vars.add(new VariableNode(i.getValue(), t, true));
 			}
 			expectEndOfLine();
-		}
-		else {
-			matchAndRemove(Token.tokenType.EQUALS);
-			vars.add(new VariableNode(ident.getValue(), currentToken.getTokenType(), currentToken.getValue(), true));
-			matchAndRemove(currentToken.getTokenType());
-			expectEndOfLine();
+		} else {
+			matchAndRemove(Token.tokenType.COLON);
+			t = currentToken.getTokenType();
+			matchAndRemove(t);
+			if(currentToken.getTokenType() == Token.tokenType.FROM) {
+				matchAndRemove(Token.tokenType.FROM);
+				Token from = matchAndRemove(currentToken.getTokenType());
+				matchAndRemove(Token.tokenType.TO);
+				Token to = matchAndRemove(currentToken.getTokenType());
+				if(t == Token.tokenType.INTEGER) {
+					vars.add(new VariableNode(ident.getValue(), t, null, true, Integer.parseInt(from.getValue()), Integer.parseInt(to.getValue())));
+				} else if (t == Token.tokenType.REAL) {
+					vars.add(new VariableNode(ident.getValue(), t, null, true, Float.parseFloat(from.getValue()), Float.parseFloat(to.getValue())));
+				}
+			}
+			vars.add(new VariableNode(ident.getValue(), t, true));
 		}
 	}
 

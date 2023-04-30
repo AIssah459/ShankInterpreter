@@ -95,6 +95,10 @@ public class Lexer {
 		keywords.put("do", Token.tokenType.DO);
 		keywords.put("true", Token.tokenType.TRUE);
 		keywords.put("false", Token.tokenType.FALSE);
+		keywords.put("array", Token.tokenType.ARRAY);
+		keywords.put("of", Token.tokenType.OF);
+		keywords.put("repeat", Token.tokenType.REPEAT);
+		keywords.put("until", Token.tokenType.UNTIL);
 		
 		/*
 		 * Add all the special characters
@@ -114,6 +118,7 @@ public class Lexer {
 		specialChars.put(">", Token.tokenType.GREATERTHAN);
 		specialChars.put("<", Token.tokenType.LESSTHAN);
 		specialChars.put(".", Token.tokenType.DOT);
+		specialChars.put("%", Token.tokenType.MODULO);
 		
 		
 	}
@@ -163,6 +168,9 @@ public class Lexer {
 		 */
 		
 		for(int i = 0; i < contentArr.length; i++) {
+			if(startOfLine) {
+				indentLevel = 0;
+			}
 			if(indentLevel > prevIndentLevel) {
 				for(int k = 0; k <= indentLevel-prevIndentLevel-1; k++) {
 					addToken("", Token.tokenType.INDENT, line);
@@ -244,12 +252,14 @@ public class Lexer {
 					if(keywords.containsKey(acc)) {
 						addKwToken(acc);
 						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
 						resetToken();
 						acc = "";
 					}
 					if(acc != "") {
 						addToken(acc, Token.tokenType.IDENTIFIER, line);
 						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
 						resetToken();
 						acc = "";
 					}
@@ -321,6 +331,7 @@ public class Lexer {
 					addToken(acc, Token.tokenType.INTEGERLIT, line);
 					addToken(acc, Token.tokenType.ENDOFLINE, line++);
 					resetToken();
+					startOfLine = true;
 					acc = "";
 				}
 				else {
@@ -350,6 +361,7 @@ public class Lexer {
 				} else if(contentArr[i] == '\n' || ("" + contentArr[i]).equals("\r\n")) {
 					addToken(acc, Token.tokenType.REALLIT, line);
 					addToken(acc, Token.tokenType.ENDOFLINE, line++);
+					startOfLine = true;
 					resetToken();
 					acc = "";
 				} else {
@@ -411,7 +423,7 @@ public class Lexer {
 				
 			case ENDOFLINE:
 				
-				startOfLine = false;
+				startOfLine = true;
 				
 				if(contentArr[i] =='\n' || ("" + contentArr[i]).equals("\r\n")) {
 					acc += contentArr[i];
@@ -453,6 +465,7 @@ public class Lexer {
 				else if(contentArr[i] == '\t') {
 					if(startOfLine) {
 						indentLevel++;
+						startOfLine = false;
 					}
 				}
 				else if(contentArr[i] == '\'') {
@@ -560,6 +573,17 @@ public class Lexer {
 		String acc = "";
 		
 		acc = generateTokens(acc, contentArr);
+
+		if(indentLevel > prevIndentLevel) {
+			for(int k = 0; k <= indentLevel-prevIndentLevel-1; k++) {
+				addToken("", Token.tokenType.INDENT, line);
+			}
+		}
+		else {
+			for(int l = 0; l < prevIndentLevel - indentLevel; l++)
+				addToken("", Token.tokenType.DEDENT, line);
+		}
+		prevIndentLevel = indentLevel;
 		
 		/*
 		 * Handles the final token
@@ -659,7 +683,11 @@ public class Lexer {
 			System.out.println("] Line: " + tokens.get(i).getLine());
 		}
 	}
-	
+
+	public void getIndentLevel() {
+
+	}
+
 	public ArrayList<Token> tokens() {
 		return this.tokens;
 	}
