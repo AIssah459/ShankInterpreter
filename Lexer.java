@@ -126,7 +126,7 @@ public class Lexer {
 		specialChars.put("<", Token.tokenType.LESSTHAN);
 		specialChars.put(".", Token.tokenType.DOT);
 		specialChars.put("%", Token.tokenType.MODULO);
-		
+		specialChars.put(";", Token.tokenType.SEMICOLON);
 		
 	}
 	

@@ -9,7 +9,8 @@ public class Shank {
 		String input;
 		//input = "define helloworld()\n\tp := 3.14\n\tWrite \"Hello World\"\ndefine goodbyeworld()\n\tWrite \"Goodbye World\"\n";
 		//input = "define add(var x: char)\n\tp := 3.14\n\tx := (((3) * -4) -(-5)) > 1";
-		input = "define a()\n\tvariables x: char\n\tx := 'a'\n\tWrite x\n";
+		input = "define addTwo(x,y : integer; var sum: integer)\n" +
+				"\tsum := x + y\n";
 //		if(args.length != 2) {
 //			usage();
 //			System.exit(0);
