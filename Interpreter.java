@@ -6,7 +6,8 @@ public class Interpreter {
 
     HashMap<String, InterpreterDataType> localVars;
     HashMap<String, InterpreterDataType> constants;
-    ArrayList<InterpreterDataType> params;
+
+    //ArrayList<InterpreterDataType> params;
     ProgramNode pn;
     Parser p;
     public Interpreter(String input) throws SyntaxErrorException{
@@ -20,33 +21,48 @@ public class Interpreter {
 
     public void start() throws SyntaxErrorException{
         for (FunctionNode fn: pn.getFunctions().values()) {
-            interpretFunction(fn, null);
+            ArrayList<InterpreterDataType> args = new ArrayList<>();
+            interpretFunction(fn, args);
         }
     }
 
     //Interprets a function in the program
-    private void interpretFunction(FunctionNode fn, ArrayList<InterpreterDataType> args) throws SyntaxErrorException {
+    private void interpretFunction(FunctionNode fn, ArrayList<InterpreterDataType>args) throws SyntaxErrorException {
         localVars = new HashMap<>();
         constants = new HashMap<>();
         constantNodes(fn);
 
-        if(args != null) {
-            for(int i = 0; i < args.size(); i++) {
-                localVars.put(fn.getParams().get(i).name(), args.get(i));
-            }
+        ArrayList<VariableNode> fParams = fn.getParams();
+
+        if (args.size() != fParams.size()) {
+            throw new RuntimeException("Incorrect number of arguments for function " + fn.getName());
         }
 
+        for (int i = 0; i < fParams.size(); i++) {
+            VariableNode fParam = fParams.get(i);
+            localVars.put(fParam.name(), args.get(i)); // Map arguments to parameters
+        }
+
+        for(VariableNode fParam: fParams) {
+            switch (fParam.type()) {
+                case INTEGERLIT -> localVars.put(fParam.name(), new IntegerDataType(0));
+                case REALLIT -> localVars.put(fParam.name(), new RealDataType(0));
+                case STRINGLIT -> localVars.put(fParam.name(), new StringDataType(""));
+                case CHARLIT -> localVars.put(fParam.name(), new CharacterDataType(' '));
+                case BOOLEAN -> localVars.put(fParam.name(), new BoolDataType(true));
+                default -> throw new SyntaxErrorException("Invalid Parameter Type.");
+            }
+        }
         //Initialize variables and constants
         for (VariableNode v: fn.vars()) {
             switch(v.type()) {
-                case INTEGERLIT -> localVars.put(v.name(), new IntegerDataType(((IntNode)v.getVal()).getVal()));
-                case REALLIT -> localVars.put(v.name(), new RealDataType(((RealNode)v.getVal()).getVal()));
-                case STRINGLIT -> localVars.put(v.name(), new StringDataType(((StringNode)v.getVal()).getVal()));
-                case CHARLIT -> localVars.put(v.name(), new CharacterDataType(((CharNode)v.getVal()).getVal()));
-                case TRUE, FALSE -> localVars.put(v.name(), new BoolDataType(((BooleanNode)v.getVal()).getVal()));
+                case INTEGERLIT -> localVars.put(v.name(), new IntegerDataType(0));
+                case REALLIT -> localVars.put(v.name(), new RealDataType(0));
+                case STRINGLIT -> localVars.put(v.name(), new StringDataType(""));
+                case CHARLIT -> localVars.put(v.name(), new CharacterDataType(' '));
+                case TRUE, FALSE -> localVars.put(v.name(), new BoolDataType(true));
             }
         }
-
         interpretBlock(fn.statements());
         if(fn instanceof BuiltInFunction) {
 
@@ -79,95 +95,56 @@ public class Interpreter {
         }
     }
 
-    private void functionCallNode(FunctionCallNode fc) throws SyntaxErrorException{
+    private InterpreterDataType resolveArgument(Node eval) throws SyntaxErrorException {
+        if (eval instanceof IntNode) {
+            return new IntegerDataType(((IntNode) eval).getVal());
+        } else if (eval instanceof RealNode) {
+            return new RealDataType(((RealNode) eval).getVal());
+        } else if (eval instanceof CharNode) {
+            return new CharacterDataType(((CharNode) eval).getVal());
+        } else if (eval instanceof StringNode) {
+            return new StringDataType(((StringNode) eval).toString());
+        } else if (eval instanceof BooleanNode) {
+            return new BoolDataType(((BooleanNode) eval).getVal());
+        } else if (eval instanceof MathOpNode) {
+            return mathOpNode((MathOpNode) eval);
+        } else if (eval instanceof VariableRefNode){
+            return variableRefNode((VariableRefNode) eval);
+        }else {
+            throw new SyntaxErrorException("Invalid type: " + eval.getClass().getSimpleName());
+        }
+    }
+
+    private void functionCallNode(FunctionCallNode fc) throws SyntaxErrorException {
         FunctionNode fn = pn.getFunctions().get(fc.getName());
+        if (fn == null) {
+            throw new RuntimeException("Function " + fc.getName() + " is not defined.");
+        }
+
         ArrayList<ParameterNode> fcParams = fc.getParams();
         ArrayList<VariableNode> fnParams = fn.getParams();
         ArrayList<InterpreterDataType> args = new ArrayList<>();
         boolean isVariadic = fn.isVariadic();
 
-        if(!isVariadic) {
-            if(fcParams.size() != fnParams.size()) {
-                throw new RuntimeException("Incorrect number of parameters in " + fc.getName() + ".");
-            }
-        }
-        for (ParameterNode pn: fcParams) {
-            Node eval = expression(pn.getVar());
-            if(eval instanceof IntNode) {
-                args.add(new IntegerDataType(((IntNode) eval).getVal()));
-            } else if (eval instanceof RealNode) {
-                args.add(new RealDataType(((RealNode) eval).getVal()));
-            } else if (eval instanceof CharNode) {
-                args.add(new CharacterDataType(((CharNode) eval).getVal()));
-            } else if (eval instanceof StringNode) {
-                args.add(new StringDataType(((StringNode) eval).toString()));
-            } else if (eval instanceof BooleanNode) {
-                args.add(new BoolDataType(((BooleanNode) eval).getVal()));
-            } else if (eval instanceof MathOpNode) {
-                args.add(mathOpNode((MathOpNode) eval));
-            } else {
-                throw new SyntaxErrorException("Invalid type");
-            }
+        if (!isVariadic && fcParams.size() != fnParams.size()) {
+            throw new RuntimeException("Incorrect number of parameters in " + fc.getName() + ".");
         }
 
-        if(fn instanceof BuiltInFunction) {
-            if(fn instanceof BuiltInRead) {
-                ((BuiltInRead) fn).execute(args);
-            } else if (fn instanceof BuiltInWrite) {
-                ((BuiltInWrite) fn).execute(args);
-            } else if (fn instanceof BuiltInRight) {
-                if(args.size() != 3) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInRight) fn).execute((StringDataType) args.get(0), (IntegerDataType) args.get(1), (StringDataType) args.get(2));
-            } else if (fn instanceof BuiltInLeft) {
-                if(args.size() != 3) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInLeft) fn).execute((StringDataType) args.get(0), (IntegerDataType) args.get(1), (StringDataType) args.get(2));
-            } else if (fn instanceof BuiltInSubstring) {
-                if(args.size() != 4) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInSubstring) fn).execute((StringDataType) args.get(0), (IntegerDataType) args.get(1), (IntegerDataType) args.get(2), (StringDataType) args.get(3));
-            } else if (fn instanceof BuiltInSqrt) {
-                if(args.size() != 2) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInSqrt) fn).execute((RealDataType) args.get(0), (RealDataType) args.get(1));
-            } else if (fn instanceof BuiltInRandom) {
-                if(args.size() != 1) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInRandom) fn).execute((IntegerDataType) args.get(0));
-            } else if (fn instanceof BuiltInIntToReal) {
-                if(args.size() != 2) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInIntToReal) fn).execute((IntegerDataType) args.get(0), (RealDataType) args.get(1));
-            } else if (fn instanceof BuiltInRealToInt) {
-                if(args.size() != 2) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInRealToInt) fn).execute((RealDataType) args.get(0), (IntegerDataType) args.get(1));
-            } else if (fn instanceof BuiltInStart) {
-                if(args.size() != 2) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInStart) fn).execute((ArrayDataType<InterpreterDataType>) args.get(0), args.get(1));
-            } else if (fn instanceof BuiltInEnd) {
-                if(args.size() != 2) {
-                    throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
-                }
-                ((BuiltInEnd) fn).execute((ArrayDataType<InterpreterDataType>) args.get(0), args.get(1));
-            }
+        for (ParameterNode pn : fcParams) {
+            Node eval = expression(pn.getVar());
+            args.add(resolveArgument(eval)); // Using refactored helper
+        }
+
+        if (fn instanceof BuiltInFunction) {
+            //((BuiltInFunction) fn).execute(args); // Polymorphism
         } else {
-            if(args.size() != fn.getParams().size()) {
+            if (args.size() != fnParams.size()) {
                 throw new RuntimeException("Incorrect number of arguments in " + fc.getName() + ".");
             }
             interpretFunction(fn, args);
         }
     }
+
 
     /*
     Interpret assignment statements
@@ -723,8 +700,8 @@ public class Interpreter {
             mathOpNode((MathOpNode) n);
         } else if (n instanceof BoolCompNode) {
             booleanCompare((BoolCompNode) n);
-        } else if(n instanceof VariableRefNode) {
-            InterpreterDataType varRef = localVars.get(((VariableRefNode) n).getName());
+        } else if(n instanceof VariableNode) {
+            InterpreterDataType varRef = localVars.get(((VariableNode) n).name());
             if(varRef instanceof IntegerDataType) {
                 return new IntNode(((IntegerDataType) varRef).getVal());
             } else if (varRef instanceof RealDataType) {
@@ -737,7 +714,9 @@ public class Interpreter {
             else {
                 throw new RuntimeException("Illegal variable reference type in math operation");
             }
-        } else if (n instanceof IntNode) {
+        } else if (n instanceof VariableRefNode) {
+            return n;
+        }else if (n instanceof IntNode) {
             return n;
         } else if (n instanceof RealNode) {
             return n;

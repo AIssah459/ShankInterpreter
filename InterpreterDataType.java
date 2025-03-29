@@ -165,6 +165,9 @@ class BoolDataType extends InterpreterDataType {
 
 class BuiltInFunction extends FunctionNode {
 
+    public void execute(ArrayList<InterpreterDataType> d) {
+
+    }
 
 }
 

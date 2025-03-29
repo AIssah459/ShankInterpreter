@@ -767,6 +767,56 @@ class ParameterNode {
 	}
 }
 
+class VariableRefNode extends Node {
+	private String name;
+	private Node arrIndexExpr; // Expression for array index.
+	private boolean changeable;
+
+	// Constructor for plain variable reference.
+	public VariableRefNode(String name) {
+		this.name = name;
+		this.arrIndexExpr = null;
+		this.changeable = false;
+	}
+
+	// Constructor for changeable variables.
+	public VariableRefNode(String name, boolean changeable) {
+		this.name = name;
+		this.arrIndexExpr = null;
+		this.changeable = changeable;
+	}
+
+	// Constructor for variables with array indexing.
+	public VariableRefNode(String name, Node arrIndexExpr) {
+		this.name = name;
+		this.arrIndexExpr = arrIndexExpr;
+		this.changeable = false;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public Node getArrIndexExpr() {
+		return arrIndexExpr;
+	}
+
+	public boolean isChangeable() {
+		return changeable;
+	}
+
+	@Override
+	public String toString() {
+		if (arrIndexExpr == null) {
+			return name;
+		} else {
+			return name + "[" + arrIndexExpr.toString() + "]";
+		}
+	}
+}
+
+
+/*
 class VariableRefNode extends Node{
 	private String name;
 	private Node arrIndexExpr;
@@ -798,6 +848,7 @@ class VariableRefNode extends Node{
 		}
 	}
 }
+*/
 
 class ArrayNode {
 

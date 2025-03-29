@@ -148,15 +148,42 @@ public class Parser {
 	}
 
 	private ParameterNode parseParameters() throws SyntaxErrorException {
-		if(currentToken.getTokenType() == Token.tokenType.IDENTIFIER) {
-			matchAndRemove(Token.tokenType.IDENTIFIER);
-			return new ParameterNode(new VariableRefNode(currentToken.getValue()));
+		if (currentToken.getTokenType() == Token.tokenType.IDENTIFIER) {
+			// Handle plain variable or array indexing.
+			Token identifier = matchAndRemove(Token.tokenType.IDENTIFIER);
+			String name = identifier.getValue();
+
+			if (currentToken.getTokenType() == Token.tokenType.LBRACKET) {
+				// Parse array index expression if '[' is found.
+				matchAndRemove(Token.tokenType.LBRACKET);
+				Node arrIndexExpr = expression(); // Parse the index expression.
+				matchAndRemove(Token.tokenType.RBRACKET);
+				return new ParameterNode(new VariableRefNode(name, arrIndexExpr));
+			} else {
+				// Plain variable reference.
+				return new ParameterNode(new VariableRefNode(name));
+			}
 		} else if (currentToken.getTokenType() == Token.tokenType.VAR) {
+			// Handle `var` keyword for mutable variable references.
 			matchAndRemove(Token.tokenType.VAR);
-			return new ParameterNode(new VariableRefNode(currentToken.getValue(), true));
+
+			Token identifier = matchAndRemove(Token.tokenType.IDENTIFIER);
+			String name = identifier.getValue();
+
+			if (currentToken.getTokenType() == Token.tokenType.LBRACKET) {
+				// Handle array index for mutable variable references.
+				matchAndRemove(Token.tokenType.LBRACKET);
+				Node arrIndexExpr = expression();
+				matchAndRemove(Token.tokenType.RBRACKET);
+				return new ParameterNode(new VariableRefNode(name, arrIndexExpr));
+			} else {
+				// Mutable plain variable reference.
+				return new ParameterNode(new VariableRefNode(name, true));
+			}
 		} else {
-			ParameterNode p = new ParameterNode(boolCmp());
-			return p;
+			// Parse as a boolean comparison or other expression.
+			Node boolCmp = boolCmp(); // Assuming `boolCmp()` parses boolean comparisons.
+			return new ParameterNode(boolCmp);
 		}
 	}
 
@@ -314,6 +341,9 @@ public class Parser {
 			case CHARLIT:
 				matchAndRemove(Token.tokenType.CHARLIT);
 				return new CharNode(token.getValue().charAt(0));
+			case REALLIT:
+				matchAndRemove(Token.tokenType.REALLIT);
+				return new RealNode(Float.parseFloat(token.getValue()));
 			default:
 				throw new RuntimeException("Unexpected token: " + token.getValue() + "(" + token.getTokenType() + "): (Line " + token.getLine() + ")");
 		}

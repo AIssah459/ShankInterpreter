@@ -15,8 +15,7 @@ public class Lexer {
 	private Token currentToken;
 	private int line;
 	private boolean startOfLine;
-	private int indentLevel;
-
+	private int currentIndentLevel;
 	private int prevIndentLevel;
 	
 	/*
@@ -38,7 +37,6 @@ public class Lexer {
 		fillHashMap();
 		line = 1;
 		startOfLine = true;
-		indentLevel = 0;
 		prevIndentLevel = 0;
 		
 		/*
@@ -71,7 +69,16 @@ public class Lexer {
 	private void addToken(String s, Token.tokenType t, int l) {
 		tokens.add(new Token(s, t, l));
 	}
-	
+
+	private int getIndentationLevel(String line) {
+		int indentLevel = 0;
+		while (indentLevel < line.length() && line.charAt(indentLevel) == '\t') {
+			indentLevel++;
+		}
+		//System.out.println("Indent Level: " + indentLevel);
+		return indentLevel;
+	}
+
 	private void fillHashMap() {
 		
 		/*
@@ -158,7 +165,7 @@ public class Lexer {
 	 * to last token
 	 */
 	
-	private String generateTokens(String acc, char[] contentArr) {
+	private String generateTokens(String acc, char[] contentArr, String lineContent) {
 		if(currentToken.getTokenType() != Token.tokenType.COMMENT) {
 			resetToken();
 		}
@@ -168,40 +175,41 @@ public class Lexer {
 		 */
 		
 		for(int i = 0; i < contentArr.length; i++) {
-			if(startOfLine) {
-				indentLevel = 0;
+			prevIndentLevel = currentIndentLevel;
+
+			if(lineContent.length() > 0)
+				currentIndentLevel = getIndentationLevel(lineContent);
+
+			// If current indentation level is greater than previous, it's an INDENT
+			if (currentIndentLevel > prevIndentLevel) {
+				tokens.add(new Token("", Token.tokenType.INDENT, line));
 			}
-			if(indentLevel > prevIndentLevel) {
-				for(int k = 0; k <= indentLevel-prevIndentLevel-1; k++) {
-					addToken("", Token.tokenType.INDENT, line);
-				}
+			// If current indentation level is less than previous, it's a DEDENT
+			else if (currentIndentLevel < prevIndentLevel) {
+				tokens.add(new Token("", Token.tokenType.DEDENT, line));
 			}
-			else {
-				for(int l = 0; l < prevIndentLevel - indentLevel; l++)
-					addToken("", Token.tokenType.DEDENT, line);
-			}
-			prevIndentLevel = indentLevel;
 
 			/*
 			 * Processes tokens differently based on the token type
 			 */
 			
 			switch(currentToken.getTokenType()) {
-			
-			/*
-			 * Case if token is Identifier
-			 * THIS CODE IS ABSOLUTE SPAGHETTI, because it needs to be flexible
-			 */
-			
-			case IDENTIFIER:
-				
+
 				/*
-				 * First, check if the current character is a letter
+				 * Case if token is Identifier
+				 * THIS CODE IS ABSOLUTE SPAGHETTI, because it needs to be flexible
 				 */
-				startOfLine = false;
-				if(Character.isLetter(contentArr[i]))
-					acc += contentArr[i];
-				
+
+				case IDENTIFIER:
+
+					/*
+					 * First, check if the current character is a letter
+					 */
+					startOfLine = false;
+					if (Character.isLetter(contentArr[i])) {
+						acc += contentArr[i];
+						lineContent += contentArr[i];
+					}
 				/*
 				 * If the current character is space, adds a token (depends on if
 				 * it's a keyword or not)
@@ -212,11 +220,13 @@ public class Lexer {
 						addKwToken(acc);
 						resetToken();
 						acc = "";
+						lineContent += " ";
 					}
 					else {
 						addToken(acc.replace("\n", "").replace(" ", ""), Token.tokenType.IDENTIFIER, line);
 						resetToken();
 						acc = "";
+						lineContent += " ";
 					}
 				}
 				
@@ -236,6 +246,7 @@ public class Lexer {
 						}
 						addSpCharToken("" + contentArr[i]);
 						acc = "";
+						lineContent += contentArr[i];
 						resetToken();
 					}
 					else {
@@ -255,6 +266,7 @@ public class Lexer {
 						startOfLine = true;
 						resetToken();
 						acc = "";
+						lineContent = "";
 					}
 					if(acc != "") {
 						addToken(acc, Token.tokenType.IDENTIFIER, line);
@@ -262,6 +274,7 @@ public class Lexer {
 						startOfLine = true;
 						resetToken();
 						acc = "";
+						lineContent = "";
 					}
 					else {
 						resetToken();
@@ -289,6 +302,7 @@ public class Lexer {
 				
 				if(Character.isDigit(contentArr[i])) {
 					acc += contentArr[i];
+					lineContent += contentArr[i];
 				}
 				else if(("" + contentArr[i]).equals(" ")) {
 					addToken(acc.replace(" ", ""), Token.tokenType.INTEGERLIT, line);
@@ -304,6 +318,7 @@ public class Lexer {
 					if(contentArr[i] == '.') {
 						if(Character.isDigit(contentArr[i + 1])) {
 							acc += contentArr[i];
+							lineContent += contentArr[i];
 							setState("", Token.tokenType.REALLIT, line);
 						}
 						else {
@@ -316,6 +331,7 @@ public class Lexer {
 							addSpCharToken("" + contentArr[i]);
 							resetToken();
 							acc = "";
+							lineContent += contentArr[i];
 						}
 					}
 					else {
@@ -326,13 +342,27 @@ public class Lexer {
 				/*
 				 * Other error handling
 				 */
-				
+
 				else if(contentArr[i] == '\n' || ("" + contentArr[i]).equals("\r\n")) {
-					addToken(acc, Token.tokenType.INTEGERLIT, line);
-					addToken(acc, Token.tokenType.ENDOFLINE, line++);
-					resetToken();
-					startOfLine = true;
-					acc = "";
+					if(keywords.containsKey(acc)) {
+						addKwToken(acc);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					if(acc != "") {
+						addToken(acc, Token.tokenType.INTEGERLIT, line);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					else {
+						resetToken();
+					}
 				}
 				else {
 					System.err.println("Illegal character " + contentArr[i] + " in INTEGER: " + acc + " (Line " + line + ")");
@@ -347,6 +377,7 @@ public class Lexer {
 
 				if(Character.isDigit(contentArr[i])) {
 					acc += contentArr[i];
+					lineContent += contentArr[i];
 				} else if(("" + contentArr[i]).equals(" ")) {
 					addToken(acc.replace(" ", ""), Token.tokenType.REALLIT, line);
 					resetToken();
@@ -359,11 +390,25 @@ public class Lexer {
 						acc = "";
 					}
 				} else if(contentArr[i] == '\n' || ("" + contentArr[i]).equals("\r\n")) {
-					addToken(acc, Token.tokenType.REALLIT, line);
-					addToken(acc, Token.tokenType.ENDOFLINE, line++);
-					startOfLine = true;
-					resetToken();
-					acc = "";
+					if(keywords.containsKey(acc)) {
+						addKwToken(acc);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					if(acc != "") {
+						addToken(acc, Token.tokenType.REALLIT, line);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					else {
+						resetToken();
+					}
 				} else {
 					System.err.println("Illegal character " + contentArr[i] + " in real number: " + acc + " (Line " + line + ")");
 					System.exit(0);
@@ -382,8 +427,29 @@ public class Lexer {
 					addToken("" + contentArr[i++], Token.tokenType.CHARLIT, line);
 					resetToken();
 					acc = "";
+					lineContent += contentArr[i];
 				}
-				else {
+				else if(contentArr[i] == '\n' || ("" + contentArr[i]).equals("\r\n")) {
+					if(keywords.containsKey(acc)) {
+						addKwToken(acc);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					if(acc != "") {
+						addToken(acc, Token.tokenType.CHARLIT, line);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					else {
+						resetToken();
+					}
+				} else {
 					System.err.println("Illegal character " + contentArr[i + 1] + "in character literal.");
 					System.exit(1);
 				}
@@ -411,8 +477,27 @@ public class Lexer {
 					resetToken();
 					acc = "";
 					i++;
-				}
-				else {
+				} else if(contentArr[i] == '\n' || ("" + contentArr[i]).equals("\r\n")) {
+					if(keywords.containsKey(acc)) {
+						addKwToken(acc);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					if(acc != "") {
+						addToken(acc, Token.tokenType.STRINGLIT, line);
+						addToken(acc, Token.tokenType.ENDOFLINE, line++);
+						startOfLine = true;
+						resetToken();
+						acc = "";
+						lineContent = "";
+					}
+					else {
+						resetToken();
+					}
+				} else {
 					System.err.println("Unclosed string literal.");
 					System.exit(1);
 				}
@@ -427,15 +512,19 @@ public class Lexer {
 				
 				if(contentArr[i] =='\n' || ("" + contentArr[i]).equals("\r\n")) {
 					acc += contentArr[i];
+					lineContent += contentArr[i];
 					addToken(acc, Token.tokenType.ENDOFLINE, line);
 					resetToken();
 					acc = "";
+					lineContent = "";
 					line++;
 				} else {
 					acc += contentArr[i];
+					lineContent += contentArr[i];
 					addToken(acc, Token.tokenType.ENDOFLINE, line);
 					resetToken();
 					acc = "" + contentArr[i];
+					lineContent = "" + contentArr[i];
 					line++;
 				}
 				break;
@@ -451,20 +540,25 @@ public class Lexer {
 				
 				if(Character.isLetter(contentArr[i])) {
 					acc += contentArr[i];
+					lineContent += contentArr[i];
 					setState("" + contentArr[i], Token.tokenType.IDENTIFIER, line);
 				}
 				else if(Character.isDigit(contentArr[i])) {
 					acc += contentArr[i];
+					lineContent += contentArr[i];
 					setState(("" + contentArr[i]), Token.tokenType.INTEGERLIT, line);
 				}
 				else if(contentArr[i] =='\n' || ("" + contentArr[i]).equals("\r\n")) {
 					addToken(("" + contentArr[i]), Token.tokenType.ENDOFLINE, line);
+					lineContent = "";
 					startOfLine = true;
 					line++;
 				}
 				else if(contentArr[i] == '\t') {
+
 					if(startOfLine) {
-						indentLevel++;
+						//currentIndentLevel++;
+						lineContent += "\t";
 						startOfLine = false;
 					}
 				}
@@ -487,6 +581,7 @@ public class Lexer {
 					if(contentArr[i] == '-') {
 						if(Character.isDigit(contentArr[i + 1])) {
 							acc += contentArr[i];
+							lineContent += contentArr[i];
 							setState("", Token.tokenType.INTEGERLIT, line);
 						}
 						else {
@@ -496,7 +591,8 @@ public class Lexer {
 					else if(contentArr[i] == ':') {
 						if(contentArr[i + 1] == '=') {
 							addToken("", Token.tokenType.ASSIGN, line);
-							i += 2;
+							lineContent += ":=";
+							i += 1;
 						}
 						else {
 							addSpCharToken("" + contentArr[i]);
@@ -520,6 +616,7 @@ public class Lexer {
 						}
 					} else {
 						addSpCharToken("" + contentArr[i]);
+						lineContent += contentArr[i];
 					}
 				}
 				else {
@@ -532,10 +629,11 @@ public class Lexer {
 								}
 							}
 							if(indented == true) {
-								indentLevel++;
+								currentIndentLevel++;
 							}
 							i += 4;
 						}
+						lineContent += " ";
 						resetToken();
 					}
 					else {
@@ -571,19 +669,26 @@ public class Lexer {
 		 */
 		
 		String acc = "";
+		String lineContent = "";
 		
-		acc = generateTokens(acc, contentArr);
+		acc = generateTokens(acc, contentArr, lineContent);
 
-		if(indentLevel > prevIndentLevel) {
-			for(int k = 0; k <= indentLevel-prevIndentLevel-1; k++) {
-				addToken("", Token.tokenType.INDENT, line);
-			}
+		/*
+		Correctly configure indentation levels ***IMPORTANT***
+		 */
+
+		prevIndentLevel = currentIndentLevel;
+		if(lineContent.length() > 0)
+			currentIndentLevel = getIndentationLevel(lineContent);
+
+		// If current indentation level is greater than previous, it's an INDENT
+		if (currentIndentLevel > prevIndentLevel) {
+			tokens.add(new Token("", Token.tokenType.INDENT, line));
 		}
-		else {
-			for(int l = 0; l < prevIndentLevel - indentLevel; l++)
-				addToken("", Token.tokenType.DEDENT, line);
+		// If current indentation level is less than previous, it's a DEDENT
+		else if (currentIndentLevel < prevIndentLevel) {
+			tokens.add(new Token("", Token.tokenType.DEDENT, line));
 		}
-		prevIndentLevel = indentLevel;
 		
 		/*
 		 * Handles the final token
